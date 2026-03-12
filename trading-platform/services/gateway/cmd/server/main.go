@@ -90,8 +90,12 @@ func Run() {
 		Format:     "${time} | ${status} | ${latency} | ${method} | ${path} | ${ip} | ${reqHeader:X-Request-ID}\n",
 		TimeFormat: time.RFC3339,
 	}))
+	corsOrigin := os.Getenv("CORS_ORIGIN")
+	if corsOrigin == "" {
+		corsOrigin = "http://localhost:3000"
+	}
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:3000",
+		AllowOrigins: corsOrigin,
 		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders: "Origin,Content-Type,Accept,Authorization",
 	}))
@@ -102,7 +106,7 @@ func Run() {
 	// Start WebSocket server on separate port
 	wsApp := fiber.New()
 	wsApp.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:3000",
+		AllowOrigins: corsOrigin,
 	}))
 	ws.SetupRoutes(wsApp, hub)
 

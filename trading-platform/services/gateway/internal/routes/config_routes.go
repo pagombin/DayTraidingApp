@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 
@@ -37,6 +36,9 @@ type ConfigItem struct {
 func (h *ConfigHandler) GetAll(c *fiber.Ctx) error {
 	category := c.Query("category")
 
+	ctx, cancel := dbCtx()
+	defer cancel()
+
 	var query string
 	var args []interface{}
 	if category != "" {
@@ -46,7 +48,7 @@ func (h *ConfigHandler) GetAll(c *fiber.Ctx) error {
 		query = "SELECT key, value, category, label, description, value_type, constraints, updated_at, updated_by FROM app_config ORDER BY category, key"
 	}
 
-	rows, err := h.db.Query(context.Background(), query, args...)
+	rows, err := h.db.Query(ctx, query, args...)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -68,8 +70,11 @@ func (h *ConfigHandler) GetAll(c *fiber.Ctx) error {
 func (h *ConfigHandler) GetByKey(c *fiber.Ctx) error {
 	key := c.Params("key")
 
+	ctx, cancel := dbCtx()
+	defer cancel()
+
 	var item ConfigItem
-	err := h.db.QueryRow(context.Background(),
+	err := h.db.QueryRow(ctx,
 		"SELECT key, value, category, label, description, value_type, constraints, updated_at, updated_by FROM app_config WHERE key = $1",
 		key).Scan(&item.Key, &item.Value, &item.Category, &item.Label, &item.Description,
 		&item.ValueType, &item.Constraints, &item.UpdatedAt, &item.UpdatedBy)
@@ -91,8 +96,11 @@ func (h *ConfigHandler) Update(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
+	ctx, cancel := dbCtx()
+	defer cancel()
+
 	// Update the config value
-	result, err := h.db.Exec(context.Background(),
+	result, err := h.db.Exec(ctx,
 		"UPDATE app_config SET value = $1, updated_at = NOW(), updated_by = $2 WHERE key = $3",
 		body.Value, username, key)
 	if err != nil {
@@ -108,7 +116,7 @@ func (h *ConfigHandler) Update(c *fiber.Ctx) error {
 		"key":       key,
 		"new_value": body.Value,
 	})
-	_, _ = h.db.Exec(context.Background(),
+	_, _ = h.db.Exec(ctx,
 		"INSERT INTO audit_log (action, entity_type, entity_id, details, user_id) VALUES ($1, $2, $3, $4, $5)",
 		"config_changed", "config", key, auditDetails, username)
 
@@ -117,7 +125,7 @@ func (h *ConfigHandler) Update(c *fiber.Ctx) error {
 		"key":   key,
 		"value": body.Value,
 	})
-	_ = h.redis.Publish(context.Background(), "config:changed", string(payload)).Err()
+	_ = h.redis.Publish(ctx, "config:changed", string(payload)).Err()
 
 	h.log.Infow("Config updated", "key", key, "by", username)
 
@@ -137,7 +145,9 @@ func (h *ConfigHandler) BulkUpdate(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
-	ctx := context.Background()
+	ctx, cancel := dbCtx()
+	defer cancel()
+
 	tx, err := h.db.Begin(ctx)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to start transaction"})

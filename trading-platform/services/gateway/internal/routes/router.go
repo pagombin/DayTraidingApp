@@ -16,6 +16,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const dbTimeout = 5 * time.Second
+
+func dbCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), dbTimeout)
+}
+
 func Setup(app *fiber.App, pool *pgxpool.Pool, rdb *redis.Client, jwtMgr *auth.JWTManager, hub *ws.Hub, log *zap.SugaredLogger, startTime time.Time) {
 	healthHandler := health.NewHandler(pool, rdb.Client, startTime)
 	configHandler := NewConfigHandler(pool, rdb, log)
@@ -52,8 +58,11 @@ func loginHandler(pool *pgxpool.Pool, jwtMgr *auth.JWTManager, log *zap.SugaredL
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 		}
 
+		ctx, cancel := dbCtx()
+		defer cancel()
+
 		var userID, passwordHash, role string
-		err := pool.QueryRow(context.Background(),
+		err := pool.QueryRow(ctx,
 			"SELECT user_id, password_hash, role FROM users WHERE username = $1", body.Username).
 			Scan(&userID, &passwordHash, &role)
 		if err != nil {
@@ -65,7 +74,9 @@ func loginHandler(pool *pgxpool.Pool, jwtMgr *auth.JWTManager, log *zap.SugaredL
 		}
 
 		// Update last login
-		_, _ = pool.Exec(context.Background(),
+		ctx2, cancel2 := dbCtx()
+		defer cancel2()
+		_, _ = pool.Exec(ctx2,
 			"UPDATE users SET last_login = NOW() WHERE user_id = $1", userID)
 
 		token, err := jwtMgr.GenerateToken(userID, body.Username, role)
@@ -84,9 +95,12 @@ func loginHandler(pool *pgxpool.Pool, jwtMgr *auth.JWTManager, log *zap.SugaredL
 
 func setupHandler(pool *pgxpool.Pool, jwtMgr *auth.JWTManager, log *zap.SugaredLogger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		ctx, cancel := dbCtx()
+		defer cancel()
+
 		// Only allow if no users exist
 		var count int
-		err := pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM users").Scan(&count)
+		err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
 		if err != nil {
 			log.Errorw("Failed to count users", "error", err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "database error"})
@@ -115,8 +129,11 @@ func setupHandler(pool *pgxpool.Pool, jwtMgr *auth.JWTManager, log *zap.SugaredL
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to hash password"})
 		}
 
+		ctx2, cancel2 := dbCtx()
+		defer cancel2()
+
 		var userID string
-		err = pool.QueryRow(context.Background(),
+		err = pool.QueryRow(ctx2,
 			"INSERT INTO users (username, password_hash, role) VALUES ($1, $2, 'admin') RETURNING user_id",
 			body.Username, string(hash)).Scan(&userID)
 		if err != nil {
@@ -142,7 +159,10 @@ func setupHandler(pool *pgxpool.Pool, jwtMgr *auth.JWTManager, log *zap.SugaredL
 
 func healthServicesHandler(pool *pgxpool.Pool) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		rows, err := pool.Query(context.Background(),
+		ctx, cancel := dbCtx()
+		defer cancel()
+
+		rows, err := pool.Query(ctx,
 			"SELECT service_name, status, last_check, response_time_ms, details FROM service_health")
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
@@ -179,7 +199,6 @@ func healthServicesHandler(pool *pgxpool.Pool) fiber.Handler {
 
 func healthResourcesHandler() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Placeholder — will be implemented with real metrics in later modules
 		return c.JSON(fiber.Map{
 			"resources": []fiber.Map{},
 			"note":      "Resource monitoring coming in a future update",

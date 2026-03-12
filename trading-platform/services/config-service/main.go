@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"trading-platform/config-service/internal/handler"
 	"trading-platform/config-service/internal/store"
@@ -16,7 +17,6 @@ import (
 )
 
 func main() {
-	// Initialize logger.
 	logger, err := zap.NewProduction()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to init logger: %v\n", err)
@@ -27,24 +27,50 @@ func main() {
 	// Build PostgreSQL connection string from environment variables.
 	dbHost := envOrDefault("DB_HOST", "localhost")
 	dbPort := envOrDefault("DB_PORT", "5432")
-	dbUser := envOrDefault("DB_USER", "postgres")
-	dbPassword := envOrDefault("DB_PASSWORD", "postgres")
-	dbName := envOrDefault("DB_NAME", "config")
+	dbUser := envOrDefault("DB_USER", "trading")
+	dbPassword := envOrDefault("DB_PASSWORD", "changeme_in_production")
+	dbName := envOrDefault("DB_NAME", "trading_platform")
 
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		dbUser, dbPassword, dbHost, dbPort, dbName,
 	)
 
-	// Connect to PostgreSQL.
-	pool, err := pgxpool.New(context.Background(), dsn)
+	// Connect to PostgreSQL with pool configuration and retry.
+	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		logger.Fatal("failed to connect to database", zap.Error(err))
+		logger.Fatal("failed to parse database config", zap.Error(err))
+	}
+
+	poolConfig.MaxConns = 10
+	poolConfig.MinConns = 2
+	poolConfig.MaxConnLifetime = 30 * time.Minute
+	poolConfig.MaxConnIdleTime = 5 * time.Minute
+	poolConfig.HealthCheckPeriod = 30 * time.Second
+
+	var pool *pgxpool.Pool
+	for attempt := 0; attempt < 5; attempt++ {
+		connectCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		pool, err = pgxpool.NewWithConfig(connectCtx, poolConfig)
+		cancel()
+		if err == nil {
+			pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			pingErr := pool.Ping(pingCtx)
+			pingCancel()
+			if pingErr == nil {
+				break
+			}
+			pool.Close()
+			err = pingErr
+		}
+		if attempt == 4 {
+			logger.Fatal("failed to connect to database after retries", zap.Error(err))
+		}
+		backoff := time.Duration(1<<uint(attempt)) * time.Second
+		logger.Warn("database connection failed, retrying",
+			zap.Int("attempt", attempt+1), zap.Duration("backoff", backoff), zap.Error(err))
+		time.Sleep(backoff)
 	}
 	defer pool.Close()
-
-	if err := pool.Ping(context.Background()); err != nil {
-		logger.Fatal("failed to ping database", zap.Error(err))
-	}
 	logger.Info("connected to database")
 
 	// Create store and handler.
@@ -59,7 +85,9 @@ func main() {
 
 	// Health check endpoint.
 	app.Get("/healthz", func(c *fiber.Ctx) error {
-		if err := pool.Ping(c.Context()); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := pool.Ping(ctx); err != nil {
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 				"status": "unhealthy",
 				"error":  err.Error(),

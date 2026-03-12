@@ -57,7 +57,11 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # Step 3: Install wizard dependencies
-pip3 install rich questionary pyyaml requests --quiet 2>/dev/null || pip install rich questionary pyyaml requests --quiet
+python3 -m pip install rich questionary pyyaml requests --quiet 2>/dev/null || pip3 install rich questionary pyyaml requests --quiet 2>/dev/null || {
+    echo "Failed to install Python dependencies."
+    echo "Try: python3 -m pip install rich questionary pyyaml requests"
+    exit 1
+}
 
 # Step 4: Run the interactive wizard
 python3 wizard/wizard.py
