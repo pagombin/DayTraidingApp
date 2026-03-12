@@ -56,15 +56,22 @@ if ! command -v python3 &> /dev/null; then
     fi
 fi
 
-# Step 3: Install wizard dependencies
-python3 -m pip install rich questionary pyyaml requests --quiet 2>/dev/null || pip3 install rich questionary pyyaml requests --quiet 2>/dev/null || {
+# Step 3: Create virtual environment and install wizard dependencies
+VENV_DIR=".venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating Python virtual environment..."
+    python3 -m venv "$VENV_DIR"
+fi
+source "$VENV_DIR/bin/activate"
+pip install rich questionary pyyaml requests --quiet || {
     echo "Failed to install Python dependencies."
-    echo "Try: python3 -m pip install rich questionary pyyaml requests"
     exit 1
 }
+echo "✓ Python dependencies installed"
 
 # Step 4: Run the interactive wizard
 python3 wizard/wizard.py
+deactivate 2>/dev/null || true
 
 # Step 5: Start the platform
 echo ""
