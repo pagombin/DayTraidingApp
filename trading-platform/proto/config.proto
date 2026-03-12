@@ -1,0 +1,17 @@
+syntax = "proto3";
+package config;
+option go_package = "trading-platform/proto/config";
+
+message ConfigItem {
+  string key = 1;
+  string value = 2;
+  string category = 3;
+  string label = 4;
+  string description = 5;
+  string value_type = 6;
+  string constraints = 7;
+}
+
+message ConfigList {
+  repeated ConfigItem items = 1;
+}

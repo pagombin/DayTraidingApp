@@ -1,0 +1,3 @@
+-- This file is intentionally left as a reference.
+-- Default config seeding is handled by 003_config_tables.sql migration.
+-- Use this file for additional seed data if needed.

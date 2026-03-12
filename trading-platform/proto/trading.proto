@@ -1,0 +1,15 @@
+syntax = "proto3";
+package trading;
+option go_package = "trading-platform/proto/trading";
+
+// Placeholder — will be defined in Module 3
+message Order {
+  string order_id = 1;
+  string symbol = 2;
+  string direction = 3;
+  string order_type = 4;
+  int32 quantity = 5;
+  double limit_price = 6;
+  double stop_price = 7;
+  string status = 8;
+}
