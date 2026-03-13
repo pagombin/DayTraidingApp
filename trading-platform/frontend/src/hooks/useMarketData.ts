@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '@/lib/api'
-import { useWebSocket } from '@/hooks/useWebSocket'
 
 export type Quote = {
   symbol: string

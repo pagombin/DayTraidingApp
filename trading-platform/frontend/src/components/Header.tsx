@@ -12,11 +12,12 @@ export default function Header({
   darkMode: boolean
   onToggleDarkMode: () => void
 }) {
-  const [currentTime, setCurrentTime] = useState(new Date())
+  const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const { services } = useHealth()
   const calendarStatus = useMarketCalendar()
 
   useEffect(() => {
+    setCurrentTime(new Date())
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
@@ -24,7 +25,7 @@ export default function Header({
   const allHealthy = services.length === 0 || services.every(s => s.status === 'healthy')
   const someUnhealthy = services.some(s => s.status === 'unhealthy')
 
-  const marketStatus = calendarStatus?.status || getMarketStatus(currentTime)
+  const marketStatus = calendarStatus?.status || (currentTime ? getMarketStatus(currentTime) : 'Loading')
   const isOpen = calendarStatus?.is_open || false
   const isPreMarket = calendarStatus?.is_pre_market || false
 
@@ -36,7 +37,7 @@ export default function Header({
         </h1>
 
         <span className="text-sm text-gray-400">
-          {currentTime.toLocaleTimeString('en-US', { hour12: true })}
+          {currentTime ? currentTime.toLocaleTimeString('en-US', { hour12: true }) : '--:--:--'}
         </span>
 
         <span className={`text-xs px-2 py-0.5 rounded-full ${
