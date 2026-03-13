@@ -436,7 +436,7 @@ func (p *AlpacaProvider) StartTickRateTracker(ctx context.Context) {
 // --- REST API Methods ---
 
 func (p *AlpacaProvider) FetchHistoricalBars(ctx context.Context, symbol string, start, end time.Time, timeframe string) ([]model.Bar, error) {
-	url := fmt.Sprintf("%s/stocks/%s/bars?timeframe=%s&start=%s&end=%s&limit=10000&adjustment=raw",
+	url := fmt.Sprintf("%s/stocks/%s/bars?timeframe=%s&start=%s&end=%s&limit=10000&adjustment=raw&feed=iex",
 		p.restURL, symbol, timeframe,
 		start.Format(time.RFC3339), end.Format(time.RFC3339))
 
@@ -525,7 +525,7 @@ func (p *AlpacaProvider) FetchOptionChain(ctx context.Context, underlying string
 }
 
 func (p *AlpacaProvider) FetchLatestQuote(ctx context.Context, symbol string) (*model.MarketTick, error) {
-	url := fmt.Sprintf("%s/stocks/%s/quotes/latest", p.restURL, symbol)
+	url := fmt.Sprintf("%s/stocks/%s/quotes/latest?feed=iex", p.restURL, symbol)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

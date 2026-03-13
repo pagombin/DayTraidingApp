@@ -15,12 +15,31 @@ type Quote = {
 }
 
 type Bar = {
-  time: string
+  timestamp: string
   open: string
   high: string
   low: string
   close: string
   volume: number
+}
+
+function fmtPrice(v: string | number | undefined): string {
+  if (v === undefined || v === null || v === '') return '-'
+  const n = typeof v === 'number' ? v : parseFloat(v)
+  return isNaN(n) ? '-' : n.toFixed(2)
+}
+
+function fmtTime(v: string | undefined): string {
+  if (!v) return '-'
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return '-'
+  return d.toLocaleTimeString()
+}
+
+function fmtVolume(v: string | number | undefined): string {
+  if (v === undefined || v === null) return '-'
+  const n = typeof v === 'number' ? v : parseInt(v, 10)
+  return isNaN(n) ? '-' : n.toLocaleString()
 }
 
 export default function MarketPage() {
@@ -118,16 +137,16 @@ export default function MarketPage() {
                       onClick={() => setSelectedSymbol(q.symbol)}
                     >
                       <td className="px-4 py-2 font-medium">{q.symbol}</td>
-                      <td className="px-4 py-2 text-right">${q.last || '-'}</td>
-                      <td className="px-4 py-2 text-right text-gray-400">${q.bid || '-'}</td>
-                      <td className="px-4 py-2 text-right text-gray-400">${q.ask || '-'}</td>
+                      <td className="px-4 py-2 text-right">${fmtPrice(q.last)}</td>
+                      <td className="px-4 py-2 text-right text-gray-400">${fmtPrice(q.bid)}</td>
+                      <td className="px-4 py-2 text-right text-gray-400">${fmtPrice(q.ask)}</td>
                       <td className={`px-4 py-2 text-right ${changeColor}`}>
-                        {change >= 0 ? '+' : ''}{q.change || '0.00'}
+                        {change >= 0 ? '+' : ''}{fmtPrice(q.change)}
                       </td>
                       <td className={`px-4 py-2 text-right ${changeColor}`}>
-                        {change >= 0 ? '+' : ''}{q.change_pct || '0.00'}%
+                        {change >= 0 ? '+' : ''}{fmtPrice(q.change_pct)}%
                       </td>
-                      <td className="px-4 py-2 text-right text-gray-400">{q.volume || '-'}</td>
+                      <td className="px-4 py-2 text-right text-gray-400">{fmtVolume(q.volume)}</td>
                     </tr>
                   )
                 })}
@@ -161,13 +180,13 @@ export default function MarketPage() {
                 {bars.slice(0, 20).map((bar, i) => (
                   <tr key={i} className="border-b border-gray-700/30 hover:bg-gray-700/20">
                     <td className="px-3 py-1 text-gray-400 text-xs">
-                      {new Date(bar.time).toLocaleTimeString()}
+                      {fmtTime(bar.timestamp)}
                     </td>
-                    <td className="px-3 py-1 text-right">{bar.open}</td>
-                    <td className="px-3 py-1 text-right text-green-400">{bar.high}</td>
-                    <td className="px-3 py-1 text-right text-red-400">{bar.low}</td>
-                    <td className="px-3 py-1 text-right font-medium">{bar.close}</td>
-                    <td className="px-3 py-1 text-right text-gray-400">{bar.volume}</td>
+                    <td className="px-3 py-1 text-right">{fmtPrice(bar.open)}</td>
+                    <td className="px-3 py-1 text-right text-green-400">{fmtPrice(bar.high)}</td>
+                    <td className="px-3 py-1 text-right text-red-400">{fmtPrice(bar.low)}</td>
+                    <td className="px-3 py-1 text-right font-medium">{fmtPrice(bar.close)}</td>
+                    <td className="px-3 py-1 text-right text-gray-400">{fmtVolume(bar.volume)}</td>
                   </tr>
                 ))}
               </tbody>

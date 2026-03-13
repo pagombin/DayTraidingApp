@@ -38,7 +38,51 @@ func SetupMarketRoutes(api fiber.Router, pool *pgxpool.Pool, rdb *goredis.Client
 			Max: "+inf",
 		}).Result()
 		if err != nil || len(symbols) == 0 {
-			return c.JSON(fiber.Map{"quotes": []interface{}{}})
+			// Fallback: query DB for latest tick per watchlist symbol
+			ctx2, cancel2 := dbCtx()
+			defer cancel2()
+			rows, dbErr := pool.Query(ctx2, `
+				SELECT DISTINCT ON (symbol) symbol, timestamp, bid, ask, last_price, volume
+				FROM market_ticks
+				WHERE symbol = ANY($1)
+				ORDER BY symbol, timestamp DESC`,
+				[]string{"SPY", "QQQ", "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "IWM"})
+			if dbErr != nil {
+				return c.JSON(fiber.Map{"quotes": []interface{}{}})
+			}
+			defer rows.Close()
+
+			var quotes []map[string]interface{}
+			for rows.Next() {
+				var sym string
+				var ts time.Time
+				var bid, ask, last *float64
+				var vol *int64
+				if err := rows.Scan(&sym, &ts, &bid, &ask, &last, &vol); err != nil {
+					continue
+				}
+				q := map[string]interface{}{
+					"symbol":    sym,
+					"timestamp": ts.Format(time.RFC3339),
+				}
+				if bid != nil {
+					q["bid"] = fmt.Sprintf("%.2f", *bid)
+				}
+				if ask != nil {
+					q["ask"] = fmt.Sprintf("%.2f", *ask)
+				}
+				if last != nil {
+					q["last"] = fmt.Sprintf("%.2f", *last)
+				}
+				if vol != nil {
+					q["volume"] = *vol
+				}
+				quotes = append(quotes, q)
+			}
+			if quotes == nil {
+				quotes = []map[string]interface{}{}
+			}
+			return c.JSON(fiber.Map{"quotes": quotes})
 		}
 
 		quotes := make([]map[string]interface{}, 0, len(symbols))
@@ -64,7 +108,7 @@ func SetupMarketRoutes(api fiber.Router, pool *pgxpool.Pool, rdb *goredis.Client
 		return c.JSON(fiber.Map{"quotes": quotes})
 	})
 
-	// Recent 1-min bars from Redis Stream
+	// Recent 1-min bars from Redis Stream, with DB fallback
 	api.Get("/market/bars/:symbol", func(c *fiber.Ctx) error {
 		symbol := c.Params("symbol")
 		count := c.QueryInt("count", 60)
@@ -74,20 +118,61 @@ func SetupMarketRoutes(api fiber.Router, pool *pgxpool.Pool, rdb *goredis.Client
 
 		streamKey := fmt.Sprintf("market:bars:%s", symbol)
 		msgs, err := rdb.XRevRangeN(c.Context(), streamKey, "+", "-", int64(count)).Result()
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-		}
-
-		bars := make([]map[string]interface{}, 0, len(msgs))
-		for _, msg := range msgs {
-			if data, ok := msg.Values["data"].(string); ok {
-				var bar map[string]interface{}
-				if err := json.Unmarshal([]byte(data), &bar); err == nil {
-					bars = append(bars, bar)
+		if err == nil && len(msgs) > 0 {
+			bars := make([]map[string]interface{}, 0, len(msgs))
+			for _, msg := range msgs {
+				if data, ok := msg.Values["data"].(string); ok {
+					var bar map[string]interface{}
+					if err := json.Unmarshal([]byte(data), &bar); err == nil {
+						bars = append(bars, bar)
+					}
 				}
 			}
+			return c.JSON(fiber.Map{"bars": bars})
 		}
 
+		// Fallback: build bars from recent ticks in DB
+		ctx2, cancel2 := dbCtx()
+		defer cancel2()
+		rows, dbErr := pool.Query(ctx2, `
+			SELECT timestamp, last_price, volume
+			FROM market_ticks
+			WHERE symbol = $1 AND timestamp >= NOW() - INTERVAL '2 hours'
+			ORDER BY timestamp DESC
+			LIMIT $2`, symbol, count)
+		if dbErr != nil {
+			return c.JSON(fiber.Map{"bars": []interface{}{}})
+		}
+		defer rows.Close()
+
+		var bars []map[string]interface{}
+		for rows.Next() {
+			var ts time.Time
+			var last *float64
+			var vol *int64
+			if err := rows.Scan(&ts, &last, &vol); err != nil {
+				continue
+			}
+			b := map[string]interface{}{
+				"timestamp": ts.Format(time.RFC3339),
+			}
+			if last != nil {
+				p := *last
+				b["open"] = fmt.Sprintf("%.2f", p)
+				b["high"] = fmt.Sprintf("%.2f", p)
+				b["low"] = fmt.Sprintf("%.2f", p)
+				b["close"] = fmt.Sprintf("%.2f", p)
+			}
+			if vol != nil {
+				b["volume"] = *vol
+			} else {
+				b["volume"] = 0
+			}
+			bars = append(bars, b)
+		}
+		if bars == nil {
+			bars = []map[string]interface{}{}
+		}
 		return c.JSON(fiber.Map{"bars": bars})
 	})
 
