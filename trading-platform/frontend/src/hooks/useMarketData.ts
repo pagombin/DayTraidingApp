@@ -46,10 +46,10 @@ export function useMarketQuotes() {
         const prev = prevQuotes.current.get(q.symbol)
         newQuotes.set(q.symbol, {
           symbol: q.symbol,
-          bid: q.bid || 0,
-          ask: q.ask || 0,
-          last: q.last || 0,
-          volume: q.volume || 0,
+          bid: Number(q.bid) || 0,
+          ask: Number(q.ask) || 0,
+          last: Number(q.last) || 0,
+          volume: Number(q.volume) || 0,
           timestamp: q.timestamp || '',
           prevLast: prev?.last,
         })
