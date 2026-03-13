@@ -207,7 +207,9 @@ ON CONFLICT (key) DO NOTHING`)
 
 func subscribeRedisToWS(rdb *redis.Client, hub *ws.Hub, log *zap.SugaredLogger) {
 	ctx := context.Background()
-	sub := rdb.Subscribe(ctx, "health:updates", "config:changed")
+	sub := rdb.Subscribe(ctx, "health:updates", "config:changed",
+		"oms:order_updates", "oms:position_updates", "portfolio:snapshot",
+		"oms:risk_alerts", "oms:killswitch")
 	defer sub.Close()
 
 	ch := sub.Channel()

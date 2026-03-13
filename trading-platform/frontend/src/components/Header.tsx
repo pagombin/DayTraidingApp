@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import KillSwitch from './KillSwitch'
 import { useHealth } from '@/hooks/useHealth'
 import { useMarketCalendar } from '@/hooks/useMarketData'
+import { useWebSocket } from '@/hooks/useWebSocket'
 
 export default function Header({
   darkMode,
@@ -13,8 +14,15 @@ export default function Header({
   onToggleDarkMode: () => void
 }) {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
+  const [dailyPnl, setDailyPnl] = useState<string>('0.00')
   const { services } = useHealth()
   const calendarStatus = useMarketCalendar()
+
+  useWebSocket(useCallback((msg) => {
+    if (msg.channel === 'portfolio:snapshot' && msg.data?.daily_pnl) {
+      setDailyPnl(msg.data.daily_pnl)
+    }
+  }, []))
 
   useEffect(() => {
     setCurrentTime(new Date())
@@ -50,7 +58,9 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="text-sm text-gray-400">PnL: $0.00</span>
+        <span className={`text-sm font-medium ${parseFloat(dailyPnl) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          PnL: {parseFloat(dailyPnl) >= 0 ? '+' : ''}${dailyPnl}
+        </span>
 
         {/* Health indicator */}
         <div className="flex items-center gap-1.5" title={allHealthy ? 'All systems healthy' : 'Issues detected'}>

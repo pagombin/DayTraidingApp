@@ -40,6 +40,9 @@ func Setup(app *fiber.App, pool *pgxpool.Pool, rdb *redis.Client, jwtMgr *auth.J
 	// Public market data routes (no auth required for dashboard)
 	SetupMarketRoutes(app.Group("/api"), pool, rdb.Client)
 
+	// Public OMS routes (orders, positions, portfolio, risk, killswitch, autonomy)
+	SetupOMSRoutes(app.Group("/api"), pool, rdb.Client)
+
 	// Public config routes (no auth required — single-user local platform)
 	app.Get("/api/config", configHandler.GetAll)
 	app.Get("/api/config/:key", configHandler.GetByKey)

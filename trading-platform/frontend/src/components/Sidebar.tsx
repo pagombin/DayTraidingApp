@@ -6,12 +6,12 @@ import { usePathname } from 'next/navigation'
 const NAV_ITEMS = [
   { href: '/', label: 'Home', icon: '\uD83C\uDFE0' },
   { href: '/market', label: 'Market', icon: '\uD83D\uDCC8', placeholder: 'Module 2' },
-  { href: '/portfolio', label: 'Portfolio', icon: '\uD83D\uDCBC', placeholder: 'Module 3' },
-  { href: '/orders', label: 'Orders', icon: '\uD83D\uDCCB', placeholder: 'Module 3' },
+  { href: '/portfolio', label: 'Portfolio', icon: '\uD83D\uDCBC' },
+  { href: '/orders', label: 'Orders', icon: '\uD83D\uDCCB' },
   { href: '/strategies', label: 'Strategies', icon: '\uD83E\uDDE0', placeholder: 'Module 5' },
   { href: '/events', label: 'Events', icon: '\uD83D\uDCF0', placeholder: 'Module 4' },
   { href: '/backtesting', label: 'Backtesting', icon: '\u23EA', placeholder: 'Module 5' },
-  { href: '/risk', label: 'Risk & Controls', icon: '\uD83D\uDEE1\uFE0F', placeholder: 'Module 8' },
+  { href: '/risk', label: 'Risk & Controls', icon: '\uD83D\uDEE1\uFE0F' },
   { href: '/health', label: 'System Health', icon: '\uD83D\uDC9A' },
   { href: '/settings', label: 'Settings', icon: '\u2699\uFE0F' },
 ]
