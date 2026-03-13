@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocket, WSMessage } from '@/hooks/useWebSocket'
 
 type Position = {
   position_id: string
@@ -60,7 +60,7 @@ export default function PortfolioPage() {
     return () => clearInterval(interval)
   }, [fetchData])
 
-  useWebSocket(useCallback((msg) => {
+  useWebSocket(useCallback((msg: WSMessage) => {
     if (msg.channel === 'portfolio:snapshot') {
       setPortfolio(msg.data)
     }

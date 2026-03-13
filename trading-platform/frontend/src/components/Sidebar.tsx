@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 
 const NAV_ITEMS = [
   { href: '/', label: 'Home', icon: '\uD83C\uDFE0' },
-  { href: '/market', label: 'Market', icon: '\uD83D\uDCC8', placeholder: 'Module 2' },
+  { href: '/market', label: 'Market', icon: '\uD83D\uDCC8' },
   { href: '/portfolio', label: 'Portfolio', icon: '\uD83D\uDCBC' },
   { href: '/orders', label: 'Orders', icon: '\uD83D\uDCCB' },
   { href: '/strategies', label: 'Strategies', icon: '\uD83E\uDDE0', placeholder: 'Module 5' },

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"trading-platform/oms/internal/broker"
+	"trading-platform/oms/internal/model"
 	"trading-platform/oms/pkg/audit"
 
 	"github.com/redis/go-redis/v9"
@@ -76,16 +77,26 @@ func (ks *KillSwitch) Activate(ctx context.Context, reason string) error {
 			if pos.Quantity == 0 {
 				continue
 			}
-			closeOrder := &model_stub_Order{
-				Symbol:   pos.Symbol,
-				Quantity: abs(pos.Quantity),
+			closeOrder := &model.Order{
+				Symbol:      pos.Symbol,
+				OrderType:   model.OrderTypeMarket,
+				TimeInForce: model.TIFDay,
+				StrategyID:  "killswitch",
+				AccountID:   "default",
 			}
 			if pos.Quantity > 0 {
-				closeOrder.Side = "sell"
+				closeOrder.Side = model.OrderSell
+				closeOrder.Quantity = pos.Quantity
 			} else {
-				closeOrder.Side = "buy"
+				closeOrder.Side = model.OrderBuy
+				closeOrder.Quantity = -pos.Quantity
 			}
-			ks.log.Infow("Flattening position", "symbol", pos.Symbol, "quantity", pos.Quantity)
+			if _, err := ks.brokerAdapter.SubmitOrder(ctx, closeOrder); err != nil {
+				ks.log.Errorw("Failed to flatten position",
+					"symbol", pos.Symbol, "quantity", pos.Quantity, "error", err)
+			} else {
+				ks.log.Infow("Flattening position", "symbol", pos.Symbol, "quantity", pos.Quantity)
+			}
 		}
 		ks.log.Infow("Flatten orders submitted", "count", len(positions))
 	}
@@ -148,15 +159,3 @@ func (ks *KillSwitch) IsActive() bool {
 	return ks.active.Load()
 }
 
-type model_stub_Order struct {
-	Symbol   string
-	Side     string
-	Quantity int
-}
-
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}

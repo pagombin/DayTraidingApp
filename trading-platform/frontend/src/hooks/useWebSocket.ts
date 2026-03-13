@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { WS_URL } from '@/lib/constants'
 
-type WSMessage = {
+export type WSMessage = {
   channel: string
   data: any
 }

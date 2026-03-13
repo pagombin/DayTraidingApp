@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import KillSwitch from './KillSwitch'
 import { useHealth } from '@/hooks/useHealth'
 import { useMarketCalendar } from '@/hooks/useMarketData'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocket, WSMessage } from '@/hooks/useWebSocket'
 
 export default function Header({
   darkMode,
@@ -18,7 +18,7 @@ export default function Header({
   const { services } = useHealth()
   const calendarStatus = useMarketCalendar()
 
-  useWebSocket(useCallback((msg) => {
+  useWebSocket(useCallback((msg: WSMessage) => {
     if (msg.channel === 'portfolio:snapshot' && msg.data?.daily_pnl) {
       setDailyPnl(msg.data.daily_pnl)
     }

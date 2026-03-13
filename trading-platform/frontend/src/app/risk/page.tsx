@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocket, WSMessage } from '@/hooks/useWebSocket'
 import Toast from '@/components/Toast'
 
 type RiskGauge = {
@@ -68,7 +68,7 @@ export default function RiskPage() {
     return () => clearInterval(interval)
   }, [fetchData])
 
-  useWebSocket(useCallback((msg) => {
+  useWebSocket(useCallback((msg: WSMessage) => {
     if (msg.channel === 'oms:risk_alerts') {
       fetchData()
     }

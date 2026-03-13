@@ -431,7 +431,178 @@ func SetupOMSRoutes(api fiber.Router, pool *pgxpool.Pool, rdb *goredis.Client) {
 	// ==================== RISK ====================
 
 	api.Get("/risk/status", func(c *fiber.Ctx) error {
-		return proxyToOMS(c, "GET", "/status")
+		ctx, cancel := dbCtx()
+		defer cancel()
+
+		// Defaults
+		var totalEquity, dailyPnL, netDelta float64
+		var maxDailyLoss, maxPositionPct, maxDeltaExposure, maxSectorConcentration float64
+		var circuitBreakerEnabled bool
+		totalEquity = 100000
+		maxDailyLoss = 500
+		maxPositionPct = 5
+		maxDeltaExposure = 500
+		maxSectorConcentration = 30
+		circuitBreakerEnabled = true
+
+		// Load risk config from DB
+		cfgRows, cfgErr := pool.Query(ctx, "SELECT key, value FROM app_config WHERE category = 'risk'")
+		if cfgErr == nil {
+			defer cfgRows.Close()
+			for cfgRows.Next() {
+				var key, value string
+				if cfgRows.Scan(&key, &value) != nil {
+					continue
+				}
+				switch key {
+				case "risk.max_daily_loss":
+					fmt.Sscanf(value, "%f", &maxDailyLoss)
+				case "risk.max_position_pct":
+					fmt.Sscanf(value, "%f", &maxPositionPct)
+				case "risk.max_delta_exposure":
+					fmt.Sscanf(value, "%f", &maxDeltaExposure)
+				case "risk.max_sector_concentration_pct":
+					fmt.Sscanf(value, "%f", &maxSectorConcentration)
+				case "risk.circuit_breaker_enabled":
+					circuitBreakerEnabled = value == "true"
+				}
+			}
+		}
+
+		// Get portfolio snapshot from Redis
+		val, redisErr := rdb.Get(ctx, "portfolio:latest").Result()
+		if redisErr == nil {
+			var snapshot map[string]interface{}
+			if json.Unmarshal([]byte(val), &snapshot) == nil {
+				if eq, ok := snapshot["total_equity"].(string); ok {
+					fmt.Sscanf(eq, "%f", &totalEquity)
+				}
+				if dp, ok := snapshot["daily_pnl"].(string); ok {
+					fmt.Sscanf(dp, "%f", &dailyPnL)
+				}
+				if nd, ok := snapshot["net_delta"].(string); ok {
+					fmt.Sscanf(nd, "%f", &netDelta)
+				}
+			}
+		}
+
+		// Calculate gauges
+		dailyLossAbs := dailyPnL
+		if dailyLossAbs > 0 {
+			dailyLossAbs = 0
+		} else {
+			dailyLossAbs = -dailyLossAbs
+		}
+
+		dailyLossPct := float64(0)
+		if maxDailyLoss > 0 {
+			dailyLossPct = (dailyLossAbs / maxDailyLoss) * 100
+		}
+
+		dailyLossStatus := "ok"
+		if dailyLossPct >= 75 {
+			dailyLossStatus = "critical"
+		} else if dailyLossPct >= 50 {
+			dailyLossStatus = "warning"
+		}
+
+		// Find largest position % of equity
+		var largestPositionPct float64
+		posRows, posErr := pool.Query(ctx,
+			"SELECT COALESCE(ABS(COALESCE(market_value, quantity * avg_cost)), 0) FROM positions WHERE account_id = 'default'")
+		if posErr == nil {
+			defer posRows.Close()
+			for posRows.Next() {
+				var mv float64
+				if posRows.Scan(&mv) == nil && totalEquity > 0 {
+					pct := (mv / totalEquity) * 100
+					if pct > largestPositionPct {
+						largestPositionPct = pct
+					}
+				}
+			}
+		}
+
+		positionStatus := "ok"
+		if largestPositionPct >= maxPositionPct*0.9 {
+			positionStatus = "critical"
+		} else if largestPositionPct >= maxPositionPct*0.6 {
+			positionStatus = "warning"
+		}
+
+		deltaAbs := netDelta
+		if deltaAbs < 0 {
+			deltaAbs = -deltaAbs
+		}
+		deltaStatus := "ok"
+		if maxDeltaExposure > 0 && deltaAbs >= maxDeltaExposure*0.9 {
+			deltaStatus = "critical"
+		} else if maxDeltaExposure > 0 && deltaAbs >= maxDeltaExposure*0.6 {
+			deltaStatus = "warning"
+		}
+
+		gauges := []fiber.Map{
+			{"name": "Daily Loss", "current": dailyLossAbs, "limit": maxDailyLoss, "unit": "$", "status": dailyLossStatus},
+			{"name": "Largest Position", "current": largestPositionPct, "limit": maxPositionPct, "unit": "%", "status": positionStatus},
+			{"name": "Net Delta", "current": deltaAbs, "limit": maxDeltaExposure, "unit": "", "status": deltaStatus},
+			{"name": "Sector Concentration", "current": 0, "limit": maxSectorConcentration, "unit": "%", "status": "ok"},
+		}
+
+		// Determine circuit breaker state
+		circuitBreakerState := "normal"
+		if circuitBreakerEnabled && maxDailyLoss > 0 {
+			switch {
+			case dailyLossPct >= 150:
+				circuitBreakerState = "emergency"
+			case dailyLossPct >= 100:
+				circuitBreakerState = "halt"
+			case dailyLossPct >= 75:
+				circuitBreakerState = "throttle"
+			case dailyLossPct >= 50:
+				circuitBreakerState = "warning"
+			}
+		}
+
+		cb := fiber.Map{
+			"state":    circuitBreakerState,
+			"daily_pnl": fmt.Sprintf("%.2f", dailyPnL),
+			"thresholds": fiber.Map{
+				"warning":   maxDailyLoss * 0.5,
+				"throttle":  maxDailyLoss * 0.75,
+				"halt":      maxDailyLoss,
+				"emergency": maxDailyLoss * 1.5,
+			},
+		}
+
+		// Get recent risk checks
+		checkRows, checkErr := pool.Query(ctx,
+			"SELECT check_name, passed, reason, checked_at FROM risk_check_results ORDER BY id DESC LIMIT 20")
+		var recentChecks []fiber.Map
+		if checkErr == nil {
+			defer checkRows.Close()
+			for checkRows.Next() {
+				var checkName, reason string
+				var passed bool
+				var checkedAt time.Time
+				if checkRows.Scan(&checkName, &passed, &reason, &checkedAt) == nil {
+					recentChecks = append(recentChecks, fiber.Map{
+						"check_name": checkName,
+						"passed":     passed,
+						"message":    reason,
+						"timestamp":  checkedAt.Format(time.RFC3339),
+					})
+				}
+			}
+		}
+		if recentChecks == nil {
+			recentChecks = []fiber.Map{}
+		}
+
+		return c.JSON(fiber.Map{
+			"gauges":          gauges,
+			"circuit_breaker": cb,
+			"recent_checks":   recentChecks,
+		})
 	})
 
 	api.Get("/risk/checks/:orderId", func(c *fiber.Ctx) error {

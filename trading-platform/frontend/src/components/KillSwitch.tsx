@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocket, WSMessage } from '@/hooks/useWebSocket'
 
 export default function KillSwitch() {
   const [confirming, setConfirming] = useState(false)
@@ -15,7 +15,7 @@ export default function KillSwitch() {
       .catch(() => {})
   }, [])
 
-  useWebSocket(useCallback((msg) => {
+  useWebSocket(useCallback((msg: WSMessage) => {
     if (msg.channel === 'oms:killswitch') {
       setActivated(msg.data?.active ?? false)
     }

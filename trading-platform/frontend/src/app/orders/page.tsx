@@ -202,22 +202,13 @@ export default function OrdersPage() {
             </div>
           </div>
           {(orderType === 'limit' || orderType === 'stop_limit') && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Limit Price</label>
-                <input type="text" value={limitPrice} onChange={e => setLimitPrice(e.target.value)} placeholder="0.00"
-                  className="w-full px-3 py-2 bg-gray-700 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500" />
-              </div>
-              {(orderType === 'stop' || orderType === 'stop_limit') && (
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Stop Price</label>
-                  <input type="text" value={stopPrice} onChange={e => setStopPrice(e.target.value)} placeholder="0.00"
-                    className="w-full px-3 py-2 bg-gray-700 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                </div>
-              )}
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Limit Price</label>
+              <input type="text" value={limitPrice} onChange={e => setLimitPrice(e.target.value)} placeholder="0.00"
+                className="w-full px-3 py-2 bg-gray-700 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
           )}
-          {orderType === 'stop' && (
+          {(orderType === 'stop' || orderType === 'stop_limit') && (
             <div>
               <label className="block text-sm text-gray-400 mb-1">Stop Price</label>
               <input type="text" value={stopPrice} onChange={e => setStopPrice(e.target.value)} placeholder="0.00"
