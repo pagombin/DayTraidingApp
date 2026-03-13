@@ -133,11 +133,7 @@ export default function SettingsPage() {
 
           {/* Special buttons per tab */}
           {activeTab === 'broker' && (
-            <div className="p-4">
-              <button className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors">
-                Test Connection
-              </button>
-            </div>
+            <BrokerTestConnection />
           )}
           {activeTab === 'data' && (
             <DataProviderStatus />
@@ -238,6 +234,50 @@ function ConfigField({ item, value, onChange }: {
           />
         )}
       </div>
+    </div>
+  )
+}
+
+function BrokerTestConnection() {
+  const [result, setResult] = useState<any>(null)
+  const [testing, setTesting] = useState(false)
+
+  const test = useCallback(async () => {
+    setTesting(true)
+    setResult(null)
+    try {
+      const data = await api.get('/api/market/status')
+      setResult({
+        success: data.connected,
+        message: data.connected
+          ? `Connected to ${data.provider || 'broker'} — ${data.symbol_count || 0} symbols active`
+          : 'Provider is not connected',
+      })
+    } catch (err: any) {
+      setResult({ success: false, message: err?.message || 'Could not reach broker service' })
+    } finally {
+      setTesting(false)
+    }
+  }, [])
+
+  return (
+    <div className="p-4 space-y-3">
+      <button
+        onClick={test}
+        disabled={testing}
+        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors disabled:opacity-50"
+      >
+        {testing ? 'Testing...' : 'Test Connection'}
+      </button>
+      {result && (
+        <div className={`rounded-lg p-3 text-sm ${
+          result.success
+            ? 'bg-green-900/20 border border-green-800 text-green-300'
+            : 'bg-red-900/20 border border-red-800 text-red-300'
+        }`}>
+          {result.message}
+        </div>
+      )}
     </div>
   )
 }

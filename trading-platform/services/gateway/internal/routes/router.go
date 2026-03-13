@@ -40,16 +40,14 @@ func Setup(app *fiber.App, pool *pgxpool.Pool, rdb *redis.Client, jwtMgr *auth.J
 	// Public market data routes (no auth required for dashboard)
 	SetupMarketRoutes(app.Group("/api"), pool, rdb.Client)
 
-	// Public config read routes (no auth required for dashboard)
+	// Public config routes (no auth required — single-user local platform)
 	app.Get("/api/config", configHandler.GetAll)
 	app.Get("/api/config/:key", configHandler.GetByKey)
+	app.Put("/api/config/:key", configHandler.Update)
+	app.Post("/api/config/bulk", configHandler.BulkUpdate)
 
-	// Protected API routes
-	api := app.Group("/api", auth.AuthMiddleware(jwtMgr))
-
-	// Config write routes (auth required)
-	api.Put("/config/:key", configHandler.Update)
-	api.Post("/config/bulk", configHandler.BulkUpdate)
+	// Auth middleware group available for future protected routes
+	_ = app.Group("/api/protected", auth.AuthMiddleware(jwtMgr))
 }
 
 func loginHandler(pool *pgxpool.Pool, jwtMgr *auth.JWTManager, log *zap.SugaredLogger) fiber.Handler {

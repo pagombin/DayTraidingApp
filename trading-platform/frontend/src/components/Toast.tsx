@@ -29,7 +29,7 @@ export default function Toast({
           onClick={onDismiss}
           className="ml-2 text-gray-400 hover:text-white"
         >
-          \u00D7
+          {'\u00D7'}
         </button>
       </div>
     </div>
