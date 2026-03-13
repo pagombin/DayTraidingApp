@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"trading-platform/gateway/internal/auth"
-	"trading-platform/gateway/internal/config"
 	"trading-platform/gateway/internal/health"
 	"trading-platform/gateway/internal/ws"
 	"trading-platform/gateway/pkg/redis"
