@@ -248,15 +248,20 @@ function DataProviderStatus() {
 
   const testConnection = useCallback(async () => {
     setTesting(true)
+    setStatus(null)
     try {
       const data = await api.get('/api/market/status')
       setStatus(data)
-    } catch {
-      setStatus({ error: 'Market data service not reachable' })
+    } catch (err: any) {
+      setStatus({ error: err?.message || 'Market data service not reachable' })
     } finally {
       setTesting(false)
     }
   }, [])
+
+  useEffect(() => {
+    testConnection()
+  }, [testConnection])
 
   return (
     <div className="p-4 space-y-3">
@@ -269,10 +274,10 @@ function DataProviderStatus() {
       </button>
 
       {status && !status.error && (
-        <div className="bg-gray-700/50 rounded-lg p-3 text-sm space-y-1">
+        <div className="bg-green-900/20 border border-green-800 rounded-lg p-3 text-sm space-y-1">
           <div className="flex justify-between">
             <span className="text-gray-400">Provider</span>
-            <span>{status.provider || 'N/A'}</span>
+            <span className="font-medium">{status.provider || 'N/A'}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-400">Connected</span>
@@ -288,6 +293,18 @@ function DataProviderStatus() {
             <span className="text-gray-400">Market</span>
             <span>{status.market_status || 'Unknown'}</span>
           </div>
+          {status.metrics && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Ticks/sec</span>
+                <span className="font-mono">{status.metrics.ticks_per_second || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Total Ticks</span>
+                <span className="font-mono">{(status.metrics.total_ticks || 0).toLocaleString()}</span>
+              </div>
+            </>
+          )}
         </div>
       )}
 
