@@ -14,6 +14,7 @@ FROM alpine:3.19
 RUN apk add --no-cache ca-certificates wget
 
 COPY --from=builder /gateway /gateway
+RUN chmod +x /gateway
 
 EXPOSE 8080 8081
 
