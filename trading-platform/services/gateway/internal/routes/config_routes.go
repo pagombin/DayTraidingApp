@@ -87,7 +87,10 @@ func (h *ConfigHandler) GetByKey(c *fiber.Ctx) error {
 
 func (h *ConfigHandler) Update(c *fiber.Ctx) error {
 	key := c.Params("key")
-	username := c.Locals("username").(string)
+	username, _ := c.Locals("username").(string)
+	if username == "" {
+		username = "system"
+	}
 
 	var body struct {
 		Value json.RawMessage `json:"value"`
@@ -133,7 +136,10 @@ func (h *ConfigHandler) Update(c *fiber.Ctx) error {
 }
 
 func (h *ConfigHandler) BulkUpdate(c *fiber.Ctx) error {
-	username := c.Locals("username").(string)
+	username, _ := c.Locals("username").(string)
+	if username == "" {
+		username = "system"
+	}
 
 	var body struct {
 		Items []struct {
