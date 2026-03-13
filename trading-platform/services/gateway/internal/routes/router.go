@@ -37,6 +37,9 @@ func Setup(app *fiber.App, pool *pgxpool.Pool, rdb *redis.Client, jwtMgr *auth.J
 	app.Get("/api/health/services", healthServicesHandler(pool))
 	app.Get("/api/health/resources", healthResourcesHandler())
 
+	// Public market data routes (no auth required for dashboard)
+	SetupMarketRoutes(app.Group("/api"), pool, rdb.Client)
+
 	// Protected API routes
 	api := app.Group("/api", auth.AuthMiddleware(jwtMgr))
 

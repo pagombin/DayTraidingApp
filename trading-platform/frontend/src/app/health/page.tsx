@@ -2,6 +2,7 @@
 
 import { useHealth } from '@/hooks/useHealth'
 import HealthCard from '@/components/HealthCard'
+import MarketDataCard from '@/components/MarketDataCard'
 
 export default function HealthPage() {
   const { services, loading } = useHealth()
@@ -19,6 +20,9 @@ export default function HealthPage() {
         </div>
       ) : (
         <>
+          {/* Market Data Status */}
+          <MarketDataCard />
+
           {/* Service Health Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {services.map(svc => (

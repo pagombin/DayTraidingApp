@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import HealthCard from '@/components/HealthCard'
 import KillSwitch from '@/components/KillSwitch'
 import OnboardingTour from '@/components/OnboardingTour'
+import WatchlistTable from '@/components/WatchlistTable'
 import { useHealth } from '@/hooks/useHealth'
 
 export default function HomePage() {
@@ -43,6 +44,9 @@ export default function HomePage() {
         <SummaryCard title="Active Strategies" value="0" subtitle="Configure in Settings" />
         <SummaryCard title="Open Positions" value="0" subtitle="No open positions" />
       </div>
+
+      {/* Watchlist */}
+      <WatchlistTable />
 
       {/* System Health Summary */}
       <div className="bg-gray-800 rounded-lg p-6">

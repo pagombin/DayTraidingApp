@@ -100,6 +100,49 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  market-data:
+    build:
+      context: ./services/market-data
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - ALPACA_API_KEY=${ALPACA_API_KEY:-}
+      - ALPACA_API_SECRET=${ALPACA_API_SECRET:-}
+      - ALPACA_DATA_URL=${ALPACA_DATA_URL:-wss://stream.data.alpaca.markets/v2/iex}
+      - ALPACA_REST_URL=${ALPACA_REST_URL:-https://data.alpaca.markets/v2}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-trading}
+      - DB_PASSWORD=${DB_PASSWORD:-changeme_in_production}
+      - DB_NAME=${DB_NAME:-trading_platform}
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - HTTP_PORT=8083
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8083/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.5'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
   watchdog:
     build:
       context: ./services/watchdog

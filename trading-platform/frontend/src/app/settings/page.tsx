@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Toast from '@/components/Toast'
 import { api } from '@/lib/api'
 
@@ -139,6 +139,9 @@ export default function SettingsPage() {
               </button>
             </div>
           )}
+          {activeTab === 'data' && (
+            <DataProviderStatus />
+          )}
           {activeTab === 'notifications' && (
             <div className="p-4">
               <button className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors">
@@ -235,6 +238,64 @@ function ConfigField({ item, value, onChange }: {
           />
         )}
       </div>
+    </div>
+  )
+}
+
+function DataProviderStatus() {
+  const [status, setStatus] = useState<any>(null)
+  const [testing, setTesting] = useState(false)
+
+  const testConnection = useCallback(async () => {
+    setTesting(true)
+    try {
+      const data = await api.get('/api/market/status')
+      setStatus(data)
+    } catch {
+      setStatus({ error: 'Market data service not reachable' })
+    } finally {
+      setTesting(false)
+    }
+  }, [])
+
+  return (
+    <div className="p-4 space-y-3">
+      <button
+        onClick={testConnection}
+        disabled={testing}
+        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors disabled:opacity-50"
+      >
+        {testing ? 'Testing...' : 'Test Connection'}
+      </button>
+
+      {status && !status.error && (
+        <div className="bg-gray-700/50 rounded-lg p-3 text-sm space-y-1">
+          <div className="flex justify-between">
+            <span className="text-gray-400">Provider</span>
+            <span>{status.provider || 'N/A'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Connected</span>
+            <span className={status.connected ? 'text-green-400' : 'text-red-400'}>
+              {status.connected ? 'Yes' : 'No'}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Symbols</span>
+            <span>{status.symbol_count || 0}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Market</span>
+            <span>{status.market_status || 'Unknown'}</span>
+          </div>
+        </div>
+      )}
+
+      {status?.error && (
+        <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 text-sm text-red-300">
+          {status.error}
+        </div>
+      )}
     </div>
   )
 }
