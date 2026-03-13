@@ -7,7 +7,7 @@ WORKDIR /app
 COPY go.mod ./
 COPY . .
 RUN go mod tidy
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /gateway .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /gateway ./cmd/server
 
 FROM alpine:3.19
 
