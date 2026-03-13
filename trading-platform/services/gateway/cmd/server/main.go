@@ -60,7 +60,7 @@ func Run() {
 	sugar.Info("Connected to Redis")
 
 	// Initialize config hot-reload
-	configMgr := config.NewManager(rdb, sugar)
+	configMgr := config.NewManager(rdb.Client, sugar)
 	go configMgr.SubscribeChanges(context.Background())
 
 	// Initialize JWT manager
