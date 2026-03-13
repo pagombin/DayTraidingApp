@@ -98,6 +98,13 @@ func (p *AlpacaProvider) Connect(ctx context.Context) error {
 			return fmt.Errorf("auth: %w", err)
 		}
 
+		// Set up keepalive: handle pongs and set read deadline
+		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+		conn.SetPongHandler(func(string) error {
+			conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+			return nil
+		})
+
 		p.mu.Lock()
 		p.conn = conn
 		p.mu.Unlock()
@@ -118,6 +125,10 @@ func (p *AlpacaProvider) Connect(ctx context.Context) error {
 				p.logger.Warn("Failed to re-subscribe after reconnect", zap.Error(err))
 			}
 		}
+
+		// Start keepalive ping loop
+		p.wg.Add(1)
+		go p.pingLoop()
 
 		// Start read loop in background
 		p.wg.Add(1)
@@ -258,6 +269,30 @@ func (p *AlpacaProvider) sendUnsubscribe(symbols []string) error {
 	return conn.WriteJSON(msg)
 }
 
+func (p *AlpacaProvider) pingLoop() {
+	defer p.wg.Done()
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+			p.mu.RLock()
+			conn := p.conn
+			p.mu.RUnlock()
+			if conn == nil {
+				return
+			}
+			if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second)); err != nil {
+				p.logger.Debug("Ping failed", zap.Error(err))
+				return
+			}
+		}
+	}
+}
+
 func (p *AlpacaProvider) readLoop() {
 	defer p.wg.Done()
 
@@ -275,9 +310,8 @@ func (p *AlpacaProvider) readLoop() {
 			if p.ctx.Err() != nil {
 				return // context cancelled, shutting down
 			}
-			p.logger.Warn("WebSocket read error, will reconnect", zap.Error(err))
+			p.logger.Warn("WebSocket read error, will reconnect", zap.Error(err), zap.String("url", p.wsURL))
 			p.setState(model.StateReconnecting)
-			// Reconnect in a new goroutine
 			go func() {
 				if err := p.Connect(p.ctx); err != nil {
 					p.logger.Error("Reconnection failed", zap.Error(err))
@@ -286,6 +320,8 @@ func (p *AlpacaProvider) readLoop() {
 			return
 		}
 
+		// Reset read deadline after each successful message
+		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		p.processMessage(msg)
 	}
 }

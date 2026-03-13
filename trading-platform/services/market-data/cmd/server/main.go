@@ -194,6 +194,33 @@ func main() {
 		sugar.Info("Snapshot fetch complete")
 	}()
 
+	// Periodic snapshot refresh — ensures data stays current even if WebSocket has gaps
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if ap, ok := prov.(*alpaca.AlpacaProvider); ok {
+					results, err := ap.FetchMultiSnapshots(ctx, symbols)
+					if err != nil {
+						sugar.Debugw("Periodic snapshot refresh failed", "error", err)
+						continue
+					}
+					for _, r := range results {
+						redisPublisher.PublishTick(ctx, r.Tick)
+						if r.PrevClose > 0 {
+							key := fmt.Sprintf("market:prevclose:%s", r.Tick.Symbol)
+							rdb.Set(ctx, key, fmt.Sprintf("%.4f", r.PrevClose), 24*time.Hour)
+						}
+					}
+				}
+			}
+		}
+	}()
+
 	// Main ingestion loop — ticks
 	go func() {
 		for {
@@ -216,6 +243,23 @@ func main() {
 					met.ValidationRejected.Add(1)
 					sugar.Debugw("Tick rejected", "error", err)
 					continue
+				}
+
+				// Merge with last known state to avoid overwriting fields with zeros.
+				// Quote ticks have bid/ask but no volume; trade ticks have last/volume but no bid/ask.
+				if prev != nil {
+					if tick.Bid.IsZero() && prev.Bid.IsPositive() {
+						tick.Bid = prev.Bid
+					}
+					if tick.Ask.IsZero() && prev.Ask.IsPositive() {
+						tick.Ask = prev.Ask
+					}
+					if tick.Volume == 0 && prev.Volume > 0 {
+						tick.Volume = prev.Volume
+					}
+					if tick.Last.IsZero() && prev.Last.IsPositive() {
+						tick.Last = prev.Last
+					}
 				}
 
 				lastKnown.Store(tick.Symbol, tick)
