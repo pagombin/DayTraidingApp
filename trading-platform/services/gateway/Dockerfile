@@ -1,4 +1,5 @@
-FROM golang:1.22-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
+ARG TARGETARCH
 
 RUN apk add --no-cache git
 
@@ -7,7 +8,7 @@ WORKDIR /app
 COPY go.mod ./
 COPY . .
 RUN go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /gateway ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /gateway ./cmd/server
 
 FROM alpine:3.19
 
