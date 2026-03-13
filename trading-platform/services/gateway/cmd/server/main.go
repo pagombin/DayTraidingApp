@@ -98,7 +98,7 @@ func main() {
 	}))
 	corsOrigin := os.Getenv("CORS_ORIGIN")
 	if corsOrigin == "" {
-		corsOrigin = "http://localhost:3000"
+		corsOrigin = "http://localhost:3001"
 	}
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: corsOrigin,
