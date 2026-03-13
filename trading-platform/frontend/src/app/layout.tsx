@@ -29,7 +29,7 @@ export default function RootLayout({
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode(!darkMode)}
         />
-        <div className="flex">
+        <div className="flex pt-14">
           <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
           <main className={`flex-1 p-6 transition-all ${sidebarOpen ? 'ml-64' : 'ml-16'}`}>
             {children}

@@ -33,6 +33,10 @@ func Setup(app *fiber.App, pool *pgxpool.Pool, rdb *redis.Client, jwtMgr *auth.J
 	app.Post("/api/auth/login", loginHandler(pool, jwtMgr, log))
 	app.Post("/api/auth/setup", setupHandler(pool, jwtMgr, log))
 
+	// Public health routes (no auth required for dashboard)
+	app.Get("/api/health/services", healthServicesHandler(pool))
+	app.Get("/api/health/resources", healthResourcesHandler())
+
 	// Protected API routes
 	api := app.Group("/api", auth.AuthMiddleware(jwtMgr))
 
@@ -41,10 +45,6 @@ func Setup(app *fiber.App, pool *pgxpool.Pool, rdb *redis.Client, jwtMgr *auth.J
 	api.Get("/config/:key", configHandler.GetByKey)
 	api.Put("/config/:key", configHandler.Update)
 	api.Post("/config/bulk", configHandler.BulkUpdate)
-
-	// Health routes
-	api.Get("/health/services", healthServicesHandler(pool))
-	api.Get("/health/resources", healthResourcesHandler())
 }
 
 func loginHandler(pool *pgxpool.Pool, jwtMgr *auth.JWTManager, log *zap.SugaredLogger) fiber.Handler {
