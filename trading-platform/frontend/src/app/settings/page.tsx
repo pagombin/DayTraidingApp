@@ -222,19 +222,38 @@ function ConfigField({ item, value, onChange }: {
         )}
 
         {item.value_type === 'json' && (
-          <input
-            type="text"
-            value={Array.isArray(value) ? value.join(', ') : JSON.stringify(value)}
-            onChange={e => {
-              const symbols = e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-              onChange(symbols)
-            }}
-            placeholder="SPY, QQQ, AAPL..."
-            className="w-full px-3 py-1.5 bg-gray-700 rounded-md border border-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
+          <JsonArrayInput value={value} onChange={onChange} />
         )}
       </div>
     </div>
+  )
+}
+
+function JsonArrayInput({ value, onChange }: { value: any, onChange: (val: any) => void }) {
+  const [text, setText] = useState(() =>
+    Array.isArray(value) ? value.join(', ') : typeof value === 'string' ? value : JSON.stringify(value)
+  )
+
+  useEffect(() => {
+    const arr = Array.isArray(value) ? value : []
+    const current = text.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+    if (JSON.stringify(arr) !== JSON.stringify(current)) {
+      setText(arr.join(', '))
+    }
+  }, [value])
+
+  return (
+    <input
+      type="text"
+      value={text}
+      onChange={e => setText(e.target.value)}
+      onBlur={() => {
+        const symbols = text.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+        onChange(symbols)
+      }}
+      placeholder="SPY, QQQ, AAPL..."
+      className="w-full px-3 py-1.5 bg-gray-700 rounded-md border border-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+    />
   )
 }
 

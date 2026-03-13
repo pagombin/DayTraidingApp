@@ -145,6 +145,25 @@ func main() {
 		ap.StartTickRateTracker(ctx)
 	}
 
+	// Fetch latest snapshots via REST so dashboard has data even when market is closed
+	go func() {
+		time.Sleep(3 * time.Second) // let connections settle
+		sugar.Info("Fetching latest quote snapshots via REST...")
+		for _, sym := range symbols {
+			tick, err := prov.FetchLatestQuote(ctx, sym)
+			if err != nil {
+				sugar.Debugw("Snapshot fetch failed", "symbol", sym, "error", err)
+				continue
+			}
+			if tick != nil {
+				if err := redisPublisher.PublishTick(ctx, *tick); err != nil {
+					sugar.Debugw("Snapshot publish failed", "symbol", sym, "error", err)
+				}
+			}
+		}
+		sugar.Info("Snapshot fetch complete")
+	}()
+
 	// Main ingestion loop — ticks
 	go func() {
 		for {
