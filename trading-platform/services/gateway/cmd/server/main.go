@@ -1,4 +1,4 @@
-package server
+package main
 
 import (
 	"context"
@@ -25,7 +25,7 @@ import (
 
 var startTime = time.Now()
 
-func Run() {
+func main() {
 	// Initialize logger
 	var zapLog *zap.Logger
 	var err error
