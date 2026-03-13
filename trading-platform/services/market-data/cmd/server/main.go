@@ -149,18 +149,48 @@ func main() {
 	go func() {
 		time.Sleep(3 * time.Second) // let connections settle
 		sugar.Info("Fetching latest quote snapshots via REST...")
-		for _, sym := range symbols {
-			tick, err := prov.FetchLatestQuote(ctx, sym)
+
+		if ap, ok := prov.(*alpaca.AlpacaProvider); ok {
+			// Use batch snapshot endpoint for efficiency and richer data (volume, prev close)
+			results, err := ap.FetchMultiSnapshots(ctx, symbols)
 			if err != nil {
-				sugar.Debugw("Snapshot fetch failed", "symbol", sym, "error", err)
-				continue
+				sugar.Warnw("Multi-snapshot fetch failed, falling back to individual", "error", err)
+				for _, sym := range symbols {
+					tick, err := prov.FetchLatestQuote(ctx, sym)
+					if err != nil {
+						sugar.Debugw("Snapshot fetch failed", "symbol", sym, "error", err)
+						continue
+					}
+					if tick != nil {
+						redisPublisher.PublishTick(ctx, *tick)
+					}
+				}
+			} else {
+				for _, r := range results {
+					if err := redisPublisher.PublishTick(ctx, r.Tick); err != nil {
+						sugar.Debugw("Snapshot publish failed", "symbol", r.Tick.Symbol, "error", err)
+					}
+					// Store prev close in Redis for change calculation
+					if r.PrevClose > 0 {
+						key := fmt.Sprintf("market:prevclose:%s", r.Tick.Symbol)
+						rdb.Set(ctx, key, fmt.Sprintf("%.4f", r.PrevClose), 24*time.Hour)
+					}
+				}
+				sugar.Infow("Multi-snapshot fetch complete", "count", len(results))
 			}
-			if tick != nil {
-				if err := redisPublisher.PublishTick(ctx, *tick); err != nil {
-					sugar.Debugw("Snapshot publish failed", "symbol", sym, "error", err)
+		} else {
+			for _, sym := range symbols {
+				tick, err := prov.FetchLatestQuote(ctx, sym)
+				if err != nil {
+					sugar.Debugw("Snapshot fetch failed", "symbol", sym, "error", err)
+					continue
+				}
+				if tick != nil {
+					redisPublisher.PublishTick(ctx, *tick)
 				}
 			}
 		}
+
 		sugar.Info("Snapshot fetch complete")
 	}()
 

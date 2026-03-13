@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -88,8 +89,10 @@ func SetupMarketRoutes(api fiber.Router, pool *pgxpool.Pool, rdb *goredis.Client
 		quotes := make([]map[string]interface{}, 0, len(symbols))
 		pipe := rdb.Pipeline()
 		cmds := make(map[string]*goredis.StringCmd, len(symbols))
+		prevCmds := make(map[string]*goredis.StringCmd, len(symbols))
 		for _, s := range symbols {
 			cmds[s] = pipe.Get(c.Context(), fmt.Sprintf("market:latest:%s", s))
+			prevCmds[s] = pipe.Get(c.Context(), fmt.Sprintf("market:prevclose:%s", s))
 		}
 		pipe.Exec(c.Context())
 
@@ -101,6 +104,24 @@ func SetupMarketRoutes(api fiber.Router, pool *pgxpool.Pool, rdb *goredis.Client
 			var quote map[string]interface{}
 			if err := json.Unmarshal([]byte(val), &quote); err == nil {
 				quote["symbol"] = symbol
+
+				// Compute change/change_pct from prev close
+				if prevVal, err := prevCmds[symbol].Result(); err == nil {
+					prevClose := 0.0
+					fmt.Sscanf(prevVal, "%f", &prevClose)
+					if prevClose > 0 {
+						lastStr, _ := json.Marshal(quote["last"])
+						last := 0.0
+						fmt.Sscanf(strings.Trim(string(lastStr), "\""), "%f", &last)
+						if last > 0 {
+							change := last - prevClose
+							changePct := (change / prevClose) * 100
+							quote["change"] = fmt.Sprintf("%.2f", change)
+							quote["change_pct"] = fmt.Sprintf("%.2f", changePct)
+						}
+					}
+				}
+
 				quotes = append(quotes, quote)
 			}
 		}

@@ -95,8 +95,8 @@ function getMarketStatus(now: Date): string {
   const time = hours * 60 + minutes
 
   if (day === 0 || day === 6) return 'Closed'
-  if (time >= 570 && time < 630) return 'Pre-Market' // 9:30 AM
-  if (time >= 630 && time < 960) return 'Open'       // 9:30 AM - 4:00 PM
-  if (time >= 960 && time < 1080) return 'After-Hours'
+  if (time >= 240 && time < 570) return 'Pre-Market'    // 4:00 AM - 9:30 AM ET
+  if (time >= 570 && time < 960) return 'Open'           // 9:30 AM - 4:00 PM ET
+  if (time >= 960 && time < 1200) return 'After-Hours'   // 4:00 PM - 8:00 PM ET
   return 'Closed'
 }

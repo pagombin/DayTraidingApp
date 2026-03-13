@@ -41,8 +41,13 @@ export function useMarketQuotes() {
   const fetchQuotes = useCallback(async () => {
     try {
       const data = await api.get('/api/market/quotes')
+      const incoming = data.quotes || []
+      // Don't clear existing data if API returns empty — keep last known quotes
+      if (incoming.length === 0 && prevQuotes.current.size > 0) {
+        return
+      }
       const newQuotes = new Map<string, Quote>()
-      for (const q of data.quotes || []) {
+      for (const q of incoming) {
         const prev = prevQuotes.current.get(q.symbol)
         newQuotes.set(q.symbol, {
           symbol: q.symbol,
@@ -57,7 +62,7 @@ export function useMarketQuotes() {
       prevQuotes.current = newQuotes
       setQuotes(newQuotes)
     } catch {
-      // API not available yet
+      // API not available yet — keep existing data
     } finally {
       setLoading(false)
     }

@@ -80,7 +80,7 @@ func (p *RedisPublisher) PublishTick(ctx context.Context, tick model.MarketTick)
 
 	// SET latest quote cache
 	latestKey := fmt.Sprintf("market:latest:%s", tick.Symbol)
-	pipe.Set(ctx, latestKey, string(tickJSON), 5*time.Minute)
+	pipe.Set(ctx, latestKey, string(tickJSON), 1*time.Hour)
 
 	// ZADD active symbols with timestamp score
 	pipe.ZAdd(ctx, "market:active_symbols", redis.Z{

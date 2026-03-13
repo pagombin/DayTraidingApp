@@ -52,10 +52,14 @@ export default function MarketPage() {
   const fetchData = useCallback(async () => {
     try {
       const [quotesRes, calendarRes] = await Promise.all([
-        api.get('/api/market/quotes').catch(() => ({ quotes: [] })),
+        api.get('/api/market/quotes').catch(() => null),
         api.get('/api/market/calendar').catch(() => null),
       ])
-      setQuotes(quotesRes.quotes || [])
+      // Only update quotes if we got actual data — don't clear on empty response
+      const incoming = quotesRes?.quotes || []
+      if (incoming.length > 0) {
+        setQuotes(incoming)
+      }
       if (calendarRes) setCalendar(calendarRes)
     } catch { /* ignore */ }
     finally { setLoading(false) }
@@ -64,8 +68,12 @@ export default function MarketPage() {
   const fetchBars = useCallback(async (symbol: string) => {
     try {
       const res = await api.get(`/api/market/bars/${symbol}?count=60`)
-      setBars(res.bars || [])
-    } catch { setBars([]) }
+      const incoming = res.bars || []
+      // Only update bars if we got actual data
+      if (incoming.length > 0) {
+        setBars(incoming)
+      }
+    } catch { /* keep existing bars */ }
   }, [])
 
   useEffect(() => {

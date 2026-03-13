@@ -433,6 +433,101 @@ func (p *AlpacaProvider) StartTickRateTracker(ctx context.Context) {
 	}()
 }
 
+// SnapshotResult holds the full snapshot data for a symbol including prev close.
+type SnapshotResult struct {
+	Tick      model.MarketTick
+	PrevClose float64
+}
+
+// FetchMultiSnapshots fetches snapshots for multiple symbols in one request.
+// Returns tick data with volume/last trade and previous daily close for change calculation.
+func (p *AlpacaProvider) FetchMultiSnapshots(ctx context.Context, symbols []string) ([]SnapshotResult, error) {
+	if len(symbols) == 0 {
+		return nil, nil
+	}
+
+	// Build comma-separated symbols list
+	symList := ""
+	for i, s := range symbols {
+		if i > 0 {
+			symList += ","
+		}
+		symList += s
+	}
+
+	url := fmt.Sprintf("%s/stocks/snapshots?symbols=%s&feed=iex", p.restURL, symList)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("APCA-API-KEY-ID", p.apiKey)
+	req.Header.Set("APCA-API-SECRET-KEY", p.apiSecret)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("alpaca snapshots API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	var snapshots map[string]struct {
+		LatestTrade struct {
+			T string  `json:"t"`
+			P float64 `json:"p"`
+		} `json:"latestTrade"`
+		LatestQuote struct {
+			T  string  `json:"t"`
+			Bp float64 `json:"bp"`
+			Ap float64 `json:"ap"`
+		} `json:"latestQuote"`
+		DailyBar struct {
+			V int64   `json:"v"`
+			C float64 `json:"c"`
+		} `json:"dailyBar"`
+		PrevDailyBar struct {
+			C float64 `json:"c"`
+		} `json:"prevDailyBar"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&snapshots); err != nil {
+		return nil, fmt.Errorf("decode snapshots: %w", err)
+	}
+
+	var results []SnapshotResult
+	for sym, snap := range snapshots {
+		tsStr := snap.LatestTrade.T
+		if tsStr == "" {
+			tsStr = snap.LatestQuote.T
+		}
+		ts, _ := time.Parse(time.RFC3339Nano, tsStr)
+
+		lastPrice := snap.LatestTrade.P
+		if lastPrice == 0 && snap.LatestQuote.Bp > 0 {
+			lastPrice = (snap.LatestQuote.Bp + snap.LatestQuote.Ap) / 2
+		}
+
+		results = append(results, SnapshotResult{
+			Tick: model.MarketTick{
+				Symbol:    sym,
+				Timestamp: ts,
+				Bid:       decimal.NewFromFloat(snap.LatestQuote.Bp),
+				Ask:       decimal.NewFromFloat(snap.LatestQuote.Ap),
+				Last:      decimal.NewFromFloat(lastPrice),
+				Volume:    snap.DailyBar.V,
+				Source:    "alpaca",
+			},
+			PrevClose: snap.PrevDailyBar.C,
+		})
+	}
+
+	return results, nil
+}
+
 // --- REST API Methods ---
 
 func (p *AlpacaProvider) FetchHistoricalBars(ctx context.Context, symbol string, start, end time.Time, timeframe string) ([]model.Bar, error) {
@@ -525,7 +620,8 @@ func (p *AlpacaProvider) FetchOptionChain(ctx context.Context, underlying string
 }
 
 func (p *AlpacaProvider) FetchLatestQuote(ctx context.Context, symbol string) (*model.MarketTick, error) {
-	url := fmt.Sprintf("%s/stocks/%s/quotes/latest?feed=iex", p.restURL, symbol)
+	// Use the snapshot endpoint which returns last trade, quote, minute bar, daily bar, and prev daily bar
+	url := fmt.Sprintf("%s/stocks/%s/snapshot?feed=iex", p.restURL, symbol)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -545,24 +641,56 @@ func (p *AlpacaProvider) FetchLatestQuote(ctx context.Context, symbol string) (*
 		return nil, fmt.Errorf("alpaca API error %d: %s", resp.StatusCode, string(body))
 	}
 
-	var result struct {
-		Quote struct {
+	var snap struct {
+		LatestTrade struct {
+			T string  `json:"t"`
+			P float64 `json:"p"`
+			S int64   `json:"s"`
+		} `json:"latestTrade"`
+		LatestQuote struct {
 			T  string  `json:"t"`
 			Bp float64 `json:"bp"`
 			Ap float64 `json:"ap"`
-		} `json:"quote"`
+			Bs int     `json:"bs"`
+			As int     `json:"as"`
+		} `json:"latestQuote"`
+		DailyBar struct {
+			T string  `json:"t"`
+			V int64   `json:"v"`
+			C float64 `json:"c"`
+		} `json:"dailyBar"`
+		PrevDailyBar struct {
+			C float64 `json:"c"`
+			V int64   `json:"v"`
+		} `json:"prevDailyBar"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&snap); err != nil {
 		return nil, err
 	}
 
-	ts, _ := time.Parse(time.RFC3339Nano, result.Quote.T)
+	// Use latest trade timestamp, fall back to quote timestamp
+	tsStr := snap.LatestTrade.T
+	if tsStr == "" {
+		tsStr = snap.LatestQuote.T
+	}
+	ts, _ := time.Parse(time.RFC3339Nano, tsStr)
+
+	// Last price from latest trade; fall back to quote midpoint
+	lastPrice := snap.LatestTrade.P
+	if lastPrice == 0 {
+		lastPrice = (snap.LatestQuote.Bp + snap.LatestQuote.Ap) / 2
+	}
+
+	// Volume from today's daily bar
+	volume := snap.DailyBar.V
+
 	tick := &model.MarketTick{
 		Symbol:    symbol,
 		Timestamp: ts,
-		Bid:       decimal.NewFromFloat(result.Quote.Bp),
-		Ask:       decimal.NewFromFloat(result.Quote.Ap),
-		Last:      decimal.NewFromFloat(result.Quote.Bp).Add(decimal.NewFromFloat(result.Quote.Ap)).Div(decimal.NewFromInt(2)),
+		Bid:       decimal.NewFromFloat(snap.LatestQuote.Bp),
+		Ask:       decimal.NewFromFloat(snap.LatestQuote.Ap),
+		Last:      decimal.NewFromFloat(lastPrice),
+		Volume:    volume,
 		Source:    "alpaca",
 	}
 	return tick, nil
